@@ -4,12 +4,13 @@ Helm Charts Repo for my various projects.
 
 ## Hello Go
 
-`charts/hello-go` is my `hello-go` app that you can find here on [GitHub](https://github.com/jkeam/hello-go) and on [Quay](https://quay.io/repository/jkeam/hello-go?tab=tags)
+`charts/hello-go` is my `hello-go` app that you can find here on [GitHub](https://github.com/jkeam/hello-go) and on [Quay](https://quay.io/repository/jkeam/hello-go?tab=tags).
 
 ### Usage
 
 ```shell
-helm repo add jonkeam https://jonkeam.com/helm-charts  # or use the UI
+oc apply -k ./openshift/helm-repo.yaml  # or using the UI
+# then create the `Hello Go` app using the Developer perspective in OpenShift
 ```
 
 ## Development
