@@ -1,0 +1,21 @@
+{{- if .Values.route.enabled -}}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  annotations:
+    openshift.io/host.generated: "true"
+  name: {{ include "hello-go.fullname" . }}
+  labels:
+    {{- include "hello-go.labels" . | nindent 4 }}
+spec:
+  port:
+    targetPort: {{ .Values.route.targetPort | default "http" }}
+  to:
+    kind: Service
+    name: {{ include "hello-go.fullname" . }}
+    weight: 100
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge
+{{ end }}
