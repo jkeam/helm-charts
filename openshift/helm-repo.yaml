@@ -1,0 +1,9 @@
+apiVersion: helm.openshift.io/v1beta1
+kind: ProjectHelmChartRepository
+metadata:
+  name: jonkeam
+spec:
+  connectionConfig:
+    url: 'https://jonkeam.com/helm-charts'
+  description: Jon Keam Apps
+  name: Jon Keam
