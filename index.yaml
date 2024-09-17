@@ -1,0 +1,37 @@
+apiVersion: v1
+entries:
+  console-plugin-nvidia-gpu:
+  - apiVersion: v2
+    appVersion: latest
+    created: "2024-09-17T01:33:03.135425631Z"
+    description: 'Red Hat OpenShift dynamic console plugin that leverages the NVIDIA
+      GPU operator metrics and serves the respective console-extensions. Requires
+      Red Hat OpenShift version 4.11+ '
+    digest: 542f33024357d68d4cb6329b218b85af57afcb8730ef4afad14f3d6c4641c233
+    home: https://github.com/rh-ecosystem-edge/console-plugin-nvidia-gpu
+    keywords:
+    - openshift-console
+    - nvidia
+    - gpu
+    maintainers:
+    - email: mres@redhat.com
+      name: mresvanis
+    name: console-plugin-nvidia-gpu
+    sources:
+    - https://github.com/rh-ecosystem-edge/console-plugin-nvidia-gpu
+    type: application
+    urls:
+    - https://github.com/jkeam/helm-charts/releases/download/console-plugin-nvidia-gpu-0.2.4/console-plugin-nvidia-gpu-0.2.4.tgz
+    version: 0.2.4
+  hello-go:
+  - apiVersion: v2
+    appVersion: 0.0.1
+    created: "2024-09-17T01:33:03.283475057Z"
+    description: A Helm chart for Hello Go
+    digest: 451ff47c3162197a19d787dd156167a149603bb3257b0ba624356285bb2f6c3a
+    name: hello-go
+    type: application
+    urls:
+    - https://github.com/jkeam/helm-charts/releases/download/hello-go-0.0.1/hello-go-0.0.1.tgz
+    version: 0.0.1
+generated: "2024-09-17T01:33:03.283480157Z"
