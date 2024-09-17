@@ -15,3 +15,5 @@ If you had already added this repo earlier,
 run `helm repo update` to retrieve the latest versions of the packages.
 
 You can then run `helm search repo jonkeam` to see the charts.
+
+Woot woot!
