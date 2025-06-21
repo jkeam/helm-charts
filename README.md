@@ -1,4 +1,4 @@
-# Jon Keam Personal Helm Charts
+# Keam Helm Charts
 
 ## Usage
 
@@ -8,12 +8,12 @@ Please refer to Helm's [documentation](https://helm.sh/docs/) to get started.
 Once Helm is set up properly, add the repo as follows:
 
 ```console
-helm repo add jonkeam https://jonkeam.com/helm-charts
+helm repo add keam https://keamchart.com/helm-charts
 ```
 
 If you had already added this repo earlier,
 run `helm repo update` to retrieve the latest versions of the packages.
 
-You can then run `helm search repo jonkeam` to see the charts.
+You can then run `helm search repo keam` to see the charts.
 
 Woot woot!
