@@ -54,3 +54,4 @@ helm create hello-go
 ### References
 
 1. [Inspired by Gerk Elznik](https://medium.com/@gerkElznik/provision-a-free-personal-helm-chart-repo-using-github-583b668d9ba4)
+2. [Helm Chart Releaser](https://helm.sh/docs/howto/chart_releaser_action/)
