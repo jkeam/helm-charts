@@ -38,8 +38,17 @@ helm create hello-go
 # then update all of the values.yaml and various other things like adding a route template
 # check in and push everything to `main` branch
 
-# any updates to the `main` branch will create a release
-#   and potentially update the github pages
+# for updating in the future:
+# Code Repo
+# 1. update the code in hello-go
+# 2. create a new release in that repo, name it something like v0.0.2
+# This Repo in Main Branch
+# 3. in ./charts/hello-go/Chart.yaml make sure `appVersion` matches, so it would be 0.0.2 (notice no 'v')
+# 4. in ./charts/hello-go/Chart.yaml update the `version` to some number bigger so that a new helm chart is created
+
+# To recap:
+# - updating this repo in the main branch can trigger a new helm chart version creation (that appears in the gh-pages branch)
+# - updating README.md in the `gh-pages` branch will trigger a build so that the [website](https://keamchart.com) gets updated
 ```
 
 ### References
