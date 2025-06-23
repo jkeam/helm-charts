@@ -20,6 +20,8 @@ This is what I did:
 
 #### Tailscale Prequisite
 
+Follow everything [here](https://tailscale.com/kb/1236/kubernetes-operator#installation), but in summary the steps are:
+
 1. Create tailnet tags
 2. Create OAuth client for `Devices - Core` and `Auth Keys`
 3. Saved `clientId` and `clientSecret` away
