@@ -35,6 +35,8 @@ Follow everything [here](https://tailscale.com/kb/1236/kubernetes-operator#insta
     oauth:
       clientId: 'whatever'
       clientSecret: 'whatever'
+    apiServerProxyConfig:
+      mode: 'noauth'
     ```
 4. Click Save
 
@@ -82,6 +84,14 @@ oc annotate service router-internal-default tailscale.com/expose=true -n openshi
 
 The console url is very specific, so you need to update some DNS somewhere in order to resolve the OCP Console URL to the new Tailscale IP address.  The quick and dirty is just to update your `/etc/hosts` on whatever computer you are using.
 
+#### API Access
+
+Because of the `apiServerProxyConfig.mode='noauth'` setting, we can use the OCP API like so:
+
+```shell
+# notice it uses the tailscale magic dns name for the tailscale-operator
+oc login --web https://tailscale-operator.tailabcde.ts.net:443
+```
 
 ## Hello Go
 
