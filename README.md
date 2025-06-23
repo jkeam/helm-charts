@@ -2,6 +2,85 @@
 
 Helm Charts Repo for my various projects.
 
+## Tailscale
+
+### Helm Chart
+
+I created my own Tailscale Operator helm chart just so that I had total control.
+This is what I did:
+
+1. Created my own operator [here](https://github.com/jkeam/tailscale-ocp-operator)
+2. Created a release of that operator [here](https://quay.io/jkeam/tailscale-ocp-operator), first release is called '0.0.1'
+3. Copied over the contents of the helm chart [here](https://github.com/tailscale/tailscale/tree/main/cmd/k8s-operator/deploy/chart) into `./charts/tailscale`
+4. Modified `./charts/tailscale/Chart.yaml`
+5. Checked all this in, at which point my pipelines created a new helm chart
+6. In OCP, made sure I had a helm chart repo for https://keamchart.com
+
+### Tailscale Operator
+
+#### Tailscale Prequisite
+
+1. Create tailnet tags
+2. Create OAuth client for `Devices - Core` and `Auth Keys`
+3. Saved `clientId` and `clientSecret` away
+
+#### Tailscale Operator App
+
+1. In OCP, create `tailscale` project
+2. In OCP, use my Keam Helm Chart repo to create a new Tailscale Operator
+3. In the `values.yaml` that appears before creation, put in the following
+    ```yaml
+    oauth:
+      clientId: 'whatever'
+      clientSecret: 'whatever'
+    ```
+4. Click Save
+
+
+#### Tailscale Proxy
+
+We have to allow the tailscale proxy to run as root,
+so we have to first create the `ProxyClass`
+
+
+```yaml
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyClass
+metadata:
+  name: ocp
+spec:
+  statefulSet:
+    pod:
+      tailscaleInitContainer:
+        securityContext:
+          privileged: true
+      tailscaleContainer:
+        securityContext:
+          privileged: true
+```
+
+And then run:
+
+```shell
+oc adm policy add-scc-to-user privileged -z proxies -n tailscale
+```
+
+#### Annotate Services
+
+Now we can annotate whatever service we want and that will get a Tailscale proxy.
+Here's an example where we annotate the router-internal-default which will then
+expose all routes, which is nice; and should be all we need.
+
+```shell
+oc label service router-internal-default tailscale.com/proxy-class=ocp -n openshift-ingress
+oc annotate service router-internal-default tailscale.com/expose=true -n openshift-ingress
+```
+
+#### DNS
+
+The console url is very specific, so you need to update some DNS somewhere in order to resolve the OCP Console URL to the new Tailscale IP address.  The quick and dirty is just to update your `/etc/hosts` on whatever computer you are using.
+
+
 ## Hello Go
 
 `charts/hello-go` is my `hello-go` app that you can find here on [GitHub](https://github.com/jkeam/hello-go) and on [Quay](https://quay.io/repository/jkeam/hello-go?tab=tags).
@@ -55,3 +134,4 @@ helm create hello-go
 
 1. [Inspired by Gerk Elznik](https://medium.com/@gerkElznik/provision-a-free-personal-helm-chart-repo-using-github-583b668d9ba4)
 2. [Helm Chart Releaser](https://helm.sh/docs/howto/chart_releaser_action/)
+3. [Tailscale on OCP](https://blog.cszevaco.com/blog/tailscale)
