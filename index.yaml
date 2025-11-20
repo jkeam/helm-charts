@@ -13,6 +13,28 @@ entries:
     version: 0.0.1
   tailscale-operator:
   - apiVersion: v2
+    appVersion: 0.0.2
+    created: "2025-11-20T04:13:32.152329164Z"
+    description: A Helm chart for Tailscale Kubernetes operator
+    digest: c4ead510f3c3f9e86eb3c1853830fa4a55af6aef62f5ec02625d27dc5bb3bc0b
+    home: https://github.com/tailscale/tailscale
+    keywords:
+    - tailscale
+    - vpn
+    - ingress
+    - egress
+    - wireguard
+    maintainers:
+    - name: tailscale-maintainers
+      url: https://tailscale.com/
+    name: tailscale-operator
+    sources:
+    - https://github.com/tailscale/tailscale
+    type: application
+    urls:
+    - https://github.com/jkeam/helm-charts/releases/download/tailscale-operator-0.0.2/tailscale-operator-0.0.2.tgz
+    version: 0.0.2
+  - apiVersion: v2
     appVersion: 0.0.1
     created: "2025-06-23T00:04:03.94913084Z"
     description: A Helm chart for Tailscale Kubernetes operator
@@ -34,4 +56,4 @@ entries:
     urls:
     - https://github.com/jkeam/helm-charts/releases/download/tailscale-operator-0.0.1/tailscale-operator-0.0.1.tgz
     version: 0.0.1
-generated: "2025-06-23T00:04:03.949140809Z"
+generated: "2025-11-20T04:13:32.152343831Z"
