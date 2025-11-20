@@ -23,7 +23,7 @@ maintainers:
     url: https://tailscale.com/
 
 # version will be set to Tailscale repo tag (without 'v') at release time.
-version: 0.0.1
+version: 0.0.2
 
 # appVersion will be set to Tailscale repo tag at release time.
-appVersion: "0.0.1"
+appVersion: "0.0.2"
