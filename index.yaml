@@ -11,3 +11,27 @@ entries:
     urls:
     - https://github.com/jkeam/helm-charts/releases/download/hello-go-0.0.1/hello-go-0.0.1.tgz
     version: 0.0.1
+  tailscale-operator:
+  - apiVersion: v2
+    appVersion: 0.0.1
+    created: "2026-02-03T21:33:41.586262003Z"
+    description: A Helm chart for Tailscale Kubernetes operator
+    digest: 60b1e48135e7350c0fda85d825ef11fb9c1f5f5f58f539628a5594d1cd54d4a4
+    home: https://github.com/tailscale/tailscale
+    keywords:
+    - tailscale
+    - vpn
+    - ingress
+    - egress
+    - wireguard
+    maintainers:
+    - name: tailscale-maintainers
+      url: https://tailscale.com/
+    name: tailscale-operator
+    sources:
+    - https://github.com/tailscale/tailscale
+    type: application
+    urls:
+    - https://github.com/jkeam/helm-charts/releases/download/tailscale-operator-0.0.1/tailscale-operator-0.0.1.tgz
+    version: 0.0.1
+generated: "2026-02-03T21:33:41.586270579Z"
