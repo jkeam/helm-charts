@@ -18,4 +18,4 @@ You can then run `helm search repo keam` to see the charts.
 
 You can validate the chart versions by checking this [site](https://keamchart.com/index.yaml).
 
-Woot woot!
+Woot!
