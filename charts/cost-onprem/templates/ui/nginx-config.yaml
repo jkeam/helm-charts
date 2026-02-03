@@ -1,0 +1,58 @@
+{{- if .Values.ui }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-ui-nginx-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+data:
+  nginx.conf: |
+    # All API calls go through the centralized gateway for JWT validation and routing
+    # The gateway handles:
+    # - JWT authentication via Keycloak
+    # - X-Rh-Identity header injection
+    # - Path-based routing to backend services (koku, ros, sources, ingress)
+    # - Method-based routing for Koku read/write split
+    location /api/ {
+      proxy_pass http://{{ include "cost-onprem.gateway.serviceName" . }}:{{ include "cost-onprem.gateway.servicePort" . }};
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      # Extended timeout for large API responses
+      proxy_read_timeout 60s;
+      proxy_send_timeout 60s;
+    }
+
+    location / {
+      root /opt/app-root/src/onprem;
+      try_files $uri $uri/ /index.html;
+      add_header X-Frame-Options "SAMEORIGIN";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Referrer-Policy "strict-origin-when-cross-origin";
+    }
+
+    location /costManagement/ {
+      alias /opt/app-root/src/costManagement/;
+      try_files $uri $uri/ /index.html;
+      add_header X-Frame-Options "SAMEORIGIN";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Referrer-Policy "strict-origin-when-cross-origin";
+    }
+
+    location /costManagementRos/ {
+      alias /opt/app-root/src/costManagementRos/;
+      try_files $uri $uri/ /index.html;
+      add_header X-Frame-Options "SAMEORIGIN";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Referrer-Policy "strict-origin-when-cross-origin";
+    }
+
+    location = /logout {
+      absolute_redirect off;
+      return 302 /oauth2/sign_out?rd=/oauth2/start;
+    }
+{{- end }}

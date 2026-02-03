@@ -1,0 +1,1109 @@
+# =============================================================================
+# Cost Management On-Premise - Helm Chart Values
+# =============================================================================
+# This chart deploys the complete Cost Management on-premise solution:
+# - ROS (Resource Optimization Service)
+# - Cost Management Service (future)
+# - Sources API
+# - Shared infrastructure (PostgreSQL, Kafka, Valkey, MinIO/ODF)
+#
+# Naming conventions:
+# - Use camelCase for all variable names
+# - Service names match their architectural role
+# =============================================================================
+
+# Chart name overrides
+nameOverride: ""
+fullnameOverride: ""
+
+# -----------------------------------------------------------------------------
+# Global Configuration (applies to all components)
+# -----------------------------------------------------------------------------
+global:
+  # Container image settings
+  pullPolicy: IfNotPresent
+  imagePullSecrets: []
+
+  # Storage class for persistent volumes (auto-detected if empty)
+  storageClass: ""
+
+  # Storage type (ODF is used for OpenShift)
+  storageType: ""
+
+  # Init container images (shared across all services)
+  # Using alternative registries to avoid docker.io rate limits
+  initContainers:
+    waitFor:
+      repository: registry.access.redhat.com/ubi9/ubi-minimal
+      tag: "latest"
+    minioMc:
+      repository: quay.io/minio/mc
+      tag: "RELEASE.2025-07-21T05-28-08Z"
+
+# -----------------------------------------------------------------------------
+# ROS (Resource Optimization Service) - Top-level Service
+# -----------------------------------------------------------------------------
+ros:
+  # Unified image configuration for all ROS components
+  # All ROS services (api, processor, recommendationPoller, housekeeper, partitionCleaner)
+  # use the same image
+  image:
+    repository: quay.io/insights-onprem/ros-ocp-backend
+    tag: "latest"
+    pullPolicy: Always
+
+  # Service Account
+  serviceAccount:
+    create: true
+    name: ros-backend
+
+  # API Component - REST API for ROS
+  api:
+    port: 8000
+    metricsPort: 9000
+    pathPrefix: /api
+
+    # Service-specific configuration
+    rbacEnabled: false # RBAC is not supported yet
+    dbPoolSize: 10
+    dbMaxOverflow: 20
+    serviceName: ros-api
+    logLevel: INFO
+
+  # Processor Component - Processes uploaded data
+  processor:
+    metricsPort: 9000
+    logLevel: INFO
+    serviceName: ros-processor
+
+    # Kafka consumer configuration
+    kafkaConsumerGroupId: ros-processor
+    kafkaAutoCommit: true
+    uploadTopic: hccm.ros.events
+
+    # Kruize integration
+    kruizeWaitTime: 120
+
+  # Recommendation Poller Component - Polls Kruize for recommendations
+  recommendationPoller:
+    metricsPort: 9000
+    logLevel: INFO
+    serviceName: ros-recommendation-poller
+
+    # Kafka consumer configuration
+    kafkaConsumerGroupId: ros-recommendation-poller
+    kafkaAutoCommit: false
+    recommendationTopic: rosocp.kruize.recommendations
+
+    # Kruize integration
+    kruizeWaitTime: 120
+
+  # Housekeeper Component - Maintenance and cleanup tasks
+  housekeeper:
+    logLevel: INFO
+    serviceName: ros-housekeeper-sources
+
+    # Partition Cleaner CronJob
+    partitionCleaner:
+      enabled: true
+      schedule: "0 0 */15 * *"  # Every 15 days at midnight
+      serviceName: ros-housekeeper-partition
+      logLevel: INFO
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "300m"
+
+# =============================================================================
+# Cost Management (Koku) Configuration
+# =============================================================================
+# Koku is the Cost Management backend service that processes cost data
+# from various cloud providers (AWS, Azure, GCP, OCP)
+
+costManagement:
+  # ---------------------------------------------------------------------------
+  # Celery Beat Scheduler Configuration
+  # ---------------------------------------------------------------------------
+  scheduleReportChecks: true
+  reportDownloadSchedule: "*/5 * * * *"
+
+  # ---------------------------------------------------------------------------
+  # S3 Configuration
+  # ---------------------------------------------------------------------------
+  s3VerifySSL: false
+  s3Endpoint: "https://s3.openshift-storage.svc:443"
+
+  storage:
+    bucketName: "koku-bucket"
+
+  # ---------------------------------------------------------------------------
+  # Koku API Configuration
+  # ---------------------------------------------------------------------------
+  api:
+    enabled: true
+
+    image:
+      repository: quay.io/insights-onprem/koku
+      tag: "sources"
+      pullPolicy: Always
+
+    reads:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 250m
+          memory: 1Gi
+        limits:
+          cpu: 1
+          memory: 2Gi
+
+      livenessProbe:
+        httpGet:
+          path: /livez
+          port: 9000
+          scheme: HTTP
+        initialDelaySeconds: 30
+        periodSeconds: 20
+        timeoutSeconds: 3
+        failureThreshold: 5
+        successThreshold: 1
+
+      readinessProbe:
+        httpGet:
+          path: /readyz
+          port: 9000
+          scheme: HTTP
+        initialDelaySeconds: 30
+        periodSeconds: 20
+        timeoutSeconds: 3
+        failureThreshold: 5
+        successThreshold: 1
+
+      env:
+        API_PATH_PREFIX: /api/cost-management
+        DEVELOPMENT: "False"
+        GUNICORN_LOG_LEVEL: INFO
+        KOKU_LOG_LEVEL: INFO
+        DJANGO_LOG_LEVEL: INFO
+        DJANGO_LOG_FORMATTER: simple
+        DJANGO_LOG_HANDLERS: console
+        PROMETHEUS_MULTIPROC_DIR: /tmp
+        KOKU_ENABLE_SENTRY: "False"
+        CACHED_VIEWS_DISABLED: "False"
+        RETAIN_NUM_MONTHS: "3"
+        NOTIFICATION_CHECK_TIME: "24"
+        ENHANCED_ORG_ADMIN: "True"
+        RBAC_CACHE_TIMEOUT: "300"
+        CACHE_TIMEOUT: "3600"
+        TAG_ENABLED_LIMIT: "200"
+        USE_READREPLICA: "False"
+        GUNICORN_WORKERS: "2"
+        GUNICORN_THREADS: "4"
+
+    writes:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 250m
+          memory: 1Gi
+        limits:
+          cpu: 1
+          memory: 2Gi
+
+      livenessProbe:
+        httpGet:
+          path: /livez
+          port: 9000
+          scheme: HTTP
+        initialDelaySeconds: 30
+        periodSeconds: 20
+        timeoutSeconds: 3
+        failureThreshold: 5
+        successThreshold: 1
+
+      readinessProbe:
+        httpGet:
+          path: /readyz
+          port: 9000
+          scheme: HTTP
+        initialDelaySeconds: 30
+        periodSeconds: 20
+        timeoutSeconds: 3
+        failureThreshold: 5
+        successThreshold: 1
+
+      env:
+        API_PATH_PREFIX: /api/cost-management
+        DEVELOPMENT: "False"
+        ENHANCED_ORG_ADMIN: "True"
+        GUNICORN_LOG_LEVEL: INFO
+        KOKU_LOG_LEVEL: INFO
+        DJANGO_LOG_LEVEL: INFO
+        DJANGO_LOG_FORMATTER: simple
+        DJANGO_LOG_HANDLERS: console
+        PROMETHEUS_MULTIPROC_DIR: /tmp
+        KOKU_ENABLE_SENTRY: "False"
+        GUNICORN_WORKERS: "1"
+        GUNICORN_THREADS: "4"
+
+    service:
+      type: ClusterIP
+      port: 8000
+      name: koku-api
+
+  # ---------------------------------------------------------------------------
+  # MASU (Data Processing Service)
+  # ---------------------------------------------------------------------------
+  masu:
+    enabled: true
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 1Gi
+      limits:
+        cpu: 500m
+        memory: 2Gi
+    env:
+      KOKU_LOG_LEVEL: DEBUG
+      DJANGO_LOG_LEVEL: INFO
+      GUNICORN_LOG_LEVEL: INFO
+      PROMETHEUS_MULTIPROC_DIR: /tmp
+
+  # ---------------------------------------------------------------------------
+  # Kafka Listener
+  # ---------------------------------------------------------------------------
+  listener:
+    enabled: true
+    # On-prem: 1 replica to fit cluster constraints (SaaS uses 2)
+    replicas: 1
+    resources:
+      # Aligned with SaaS Clowder configuration
+      requests:
+        cpu: 150m
+        memory: 300Mi
+      limits:
+        cpu: 300m
+        memory: 600Mi
+    env:
+      KOKU_LOG_LEVEL: INFO
+      DJANGO_LOG_LEVEL: INFO
+      PROMETHEUS_MULTIPROC_DIR: /tmp
+
+  # ---------------------------------------------------------------------------
+  # Kafka Configuration
+  # ---------------------------------------------------------------------------
+  kafka:
+    enabled: true
+    host: cost-onprem-kafka-kafka-bootstrap.kafka.svc.cluster.local
+    port: 9092
+    consumerGroupId: cost-mgmt-listener-group
+    topic: platform.upload.announce
+
+  # ---------------------------------------------------------------------------
+  # Celery Configuration
+  # ---------------------------------------------------------------------------
+  celery:
+    pollingTimer: 300
+    resultExpires: 28800
+
+    beat:
+      replicas: 1
+      resources:
+        # Aligned with SaaS Clowder configuration (scheduler)
+        requests:
+          cpu: 50m
+          memory: 200Mi
+        limits:
+          cpu: 100m
+          memory: 400Mi
+      env:
+        KOKU_LOG_LEVEL: INFO
+        DJANGO_LOG_LEVEL: INFO
+        PROMETHEUS_MULTIPROC_DIR: /tmp
+
+    workers:
+      commonEnv:
+        KOKU_LOG_LEVEL: INFO
+        DJANGO_LOG_LEVEL: INFO
+        PROMETHEUS_MULTIPROC_DIR: /tmp
+
+      default:
+        replicas: 1
+        queue: celery
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+          limits:
+            cpu: 200m
+            memory: 400Mi
+
+      priority:
+        # On-prem: 1 replica to fit cluster constraints (SaaS uses 2)
+        replicas: 1
+        queue: priority
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 250m
+            memory: 1Gi
+          limits:
+            cpu: 500m
+            memory: 2Gi
+
+      refresh:
+        # OCP-ONLY: Disabled - primary use is delete_openshift_on_cloud_data for OCP-on-cloud
+        replicas: 0
+        queue: refresh
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 200m
+            memory: 512Mi
+
+      summary:
+        replicas: 1
+        queue: summary
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 250m
+            memory: 1Gi
+          limits:
+            cpu: 500m
+            memory: 2Gi
+
+      hcs:
+        # OCP-ONLY: Disabled - HCS only supports AWS, Azure, GCP (not OCP)
+        replicas: 0
+        queue: hcs
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 300Mi
+          limits:
+            cpu: 200m
+            memory: 500Mi
+
+      download:
+        # OCP-ONLY: Disabled - OCP uses PUSH model via Kafka, not PULL from S3
+        replicas: 0
+        queue: download
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 400m
+            memory: 1Gi
+
+      priorityXl:
+        # On-prem: 1 replica to fit cluster constraints (SaaS uses 2)
+        replicas: 1
+        queue: priority,priority_xl
+        concurrency: 5
+        resources:
+          # Aligned with SaaS Clowder configuration
+          requests:
+            cpu: 150m
+            memory: 400Mi
+          limits:
+            cpu: 300m
+            memory: 750Mi
+
+      refreshXl:
+        # OCP-ONLY: Disabled - not needed for OCP
+        replicas: 0
+        queue: refresh,refresh_xl
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 200m
+            memory: 512Mi
+
+      summaryXl:
+        replicas: 1
+        queue: summary,summary_xl
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+          limits:
+            cpu: 200m
+            memory: 400Mi
+
+      downloadXl:
+        # OCP-ONLY: Disabled - not needed for OCP
+        replicas: 0
+        queue: download,download_xl
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 400m
+            memory: 1Gi
+
+      priorityPenalty:
+        # On-prem: 1 replica to fit cluster constraints (SaaS uses 2)
+        replicas: 1
+        queue: priority,priority_penalty
+        concurrency: 5
+        resources:
+          # Aligned with SaaS Clowder configuration
+          requests:
+            cpu: 150m
+            memory: 400Mi
+          limits:
+            cpu: 300m
+            memory: 750Mi
+
+      refreshPenalty:
+        # OCP-ONLY: Disabled - not needed for OCP
+        replicas: 0
+        queue: refresh,refresh_penalty
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 200m
+            memory: 512Mi
+
+      summaryPenalty:
+        replicas: 1
+        queue: summary,summary_penalty
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+          limits:
+            cpu: 200m
+            memory: 400Mi
+
+      downloadPenalty:
+        # OCP-ONLY: Disabled - not needed for OCP
+        replicas: 0
+        queue: download,download_penalty
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 400m
+            memory: 1Gi
+
+      ocp:
+        replicas: 1
+        queue: ocp
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+
+      ocpXl:
+        replicas: 1
+        queue: ocp_xl
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 200m
+            memory: 512Mi
+
+      ocpPenalty:
+        replicas: 1
+        queue: ocp_penalty
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 200m
+            memory: 512Mi
+
+      costModel:
+        replicas: 1
+        queue: cost_model
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 200m
+            memory: 512Mi
+
+      costModelXl:
+        replicas: 1
+        queue: cost_model_xl
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 200m
+            memory: 512Mi
+
+      costModelPenalty:
+        replicas: 1
+        queue: cost_model_penalty
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 200m
+            memory: 512Mi
+
+      subsExtraction:
+        # Disabled in SaaS - not needed for on-prem
+        replicas: 0
+        queue: subs_extraction
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 300Mi
+          limits:
+            cpu: 200m
+            memory: 500Mi
+
+      subsTransmission:
+        # Disabled in SaaS - not needed for on-prem
+        replicas: 0
+        queue: subs_transmission
+        concurrency: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 300Mi
+          limits:
+            cpu: 200m
+            memory: 500Mi
+
+  # ---------------------------------------------------------------------------
+  # Django Configuration
+  # ---------------------------------------------------------------------------
+  django:
+    secretKeyLength: 50
+
+  # ---------------------------------------------------------------------------
+  # Service Account Configuration
+  # ---------------------------------------------------------------------------
+  serviceAccount:
+    create: true
+    name: koku
+    annotations: {}
+
+# =============================================================================
+# Mock RBAC Service Configuration
+# =============================================================================
+# Lightweight RBAC service for on-prem environments
+
+mockRbac:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: python
+    tag: "3.11-slim"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8111
+  debug: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# -----------------------------------------------------------------------------
+# Kruize - Optimization Engine (ROS Dependency)
+# -----------------------------------------------------------------------------
+# Kruize is used exclusively by ROS for workload optimization recommendations
+kruize:
+  image:
+    repository: quay.io/redhat-services-prod/kruize-autotune-tenant/autotune
+    tag: "d0b4337"
+
+  port: 8080
+
+  # Kruize environment configuration
+  env:
+    loggingLevel: debug
+    rootLoggingLevel: error
+    dbConfigFile: /tmp/cdappconfig.json
+    dbDriver: "jdbc:postgresql://"
+    clusterType: kubernetes
+    k8sType: openshift
+    authType: ""
+    monitoringAgent: "prometheus"
+    monitoringService: "prometheus"
+    monitoringEndpoint: "prometheus"
+    saveToDb: true
+    local: true
+    logAllHttpReqAndResponse: true
+
+    # Hibernate/JPA configuration
+    hibernateDialect: org.hibernate.dialect.PostgreSQLDialect
+    hibernateDriver: org.postgresql.Driver
+    hibernateC3p0MinSize: 2
+    hibernateC3p0MaxSize: 5
+    hibernateC3p0Timeout: 300
+    hibernateC3p0MaxStatements: 100
+    hibernateHbm2ddlAuto: none
+    hibernateShowSql: false
+    hibernateTimezone: UTC
+    plots: true
+
+  # Partition management
+  partitions:
+    createEnabled: true
+    deleteEnabled: true
+    deleteSchedule: "0 0 * * *"  # Daily at midnight
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 1
+    loggingLevel: info
+    rootLoggingLevel: error
+    deletePartitionsThreshold: "16"
+
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "300m"
+
+# -----------------------------------------------------------------------------
+# Ingress Service (Shared entry point for uploads and routing)
+# -----------------------------------------------------------------------------
+# Uses insights-ingress-go which requires INGRESS_* prefixed environment variables
+ingress:
+  serviceAccount:
+    create: true
+    name: ingress
+
+  image:
+    repository: quay.io/insights-onprem/insights-ingress-go
+    tag: "latest"
+    pullPolicy: Always
+
+  # Server configuration
+  server:
+    port: 8081
+    debug: false
+
+  # Upload handling
+  upload:
+    maxUploadSize: 104857600  # 100MB (INGRESS_DEFAULTMAXSIZE)
+    maxMemory: 33554432       # 32MB (INGRESS_MAXUPLOADMEM)
+    # Valid upload types - comma-separated list for INGRESS_VALID_UPLOAD_TYPES
+    # This is REQUIRED by insights-ingress-go
+    validTypes: "hccm"
+
+  # Storage backend configuration (MinIO/S3)
+  # INGRESS_STAGEBUCKET - staging bucket where uploads are stored before processing
+  storage:
+    bucket: "insights-upload-perma"
+    useSSL: false      # Overridden to true on OpenShift (ODF)
+
+  # Kafka producer configuration
+  kafka:
+    topic: "platform.upload.announce"  # INGRESS_KAFKAANNOUNCETOPIC
+    groupId: "ingress"                 # INGRESS_KAFKAGROUPID
+
+  # Logging
+  logging:
+    level: "INFO"      # INGRESS_LOGLEVEL (uppercase)
+
+  # Metrics
+  metrics:
+    port: 9090         # INGRESS_METRICSPORT (separate from web port)
+
+# -----------------------------------------------------------------------------
+# Shared Infrastructure - Database (Unified PostgreSQL for all services)
+# -----------------------------------------------------------------------------
+# Unified PostgreSQL server for all on-prem services
+# Single StatefulSet hosts separate databases: ros_db, kruize_db, koku
+#
+# ⚠️  SECURITY: Credential Management
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Passwords are NEVER stored in values.yaml for security.
+#
+# Secret Creation:
+#   Secrets are automatically created by scripts/install-helm-chart.sh
+#   BEFORE Helm deployment with secure random passwords (32 characters).
+#
+# Secrets Created:
+#   - cost-onprem-db-credentials (or <release-name>-db-credentials)
+#     Contains: postgres, ros, kruize, koku, sources user credentials
+#
+# Retrieving Credentials:
+#   kubectl get secret cost-onprem-db-credentials -n cost-onprem \
+#     -o jsonpath='{.data.postgres-password}' | base64 -d
+#
+# Manual Secret Management (Advanced):
+#   To use custom passwords, create secret BEFORE running install script:
+#
+#   kubectl create secret generic cost-onprem-db-credentials \
+#     --namespace=cost-onprem \
+#     --from-literal=postgres-user=postgres \
+#     --from-literal=postgres-password=<YOUR_PASSWORD> \
+#     --from-literal=ros-user=ros_user \
+#     --from-literal=ros-password=<YOUR_PASSWORD> \
+#     --from-literal=kruize-user=kruize_user \
+#     --from-literal=kruize-password=<YOUR_PASSWORD> \
+#     --from-literal=koku-user=koku \
+#     --from-literal=koku-password=<YOUR_PASSWORD> \
+#     --from-literal=sources-user=sources \
+#     --from-literal=sources-password=<YOUR_PASSWORD>
+#
+# Security Model:
+# - Each service gets its own dedicated database and user
+# - All credentials stored in Kubernetes secrets (never in Helm values)
+# - Users have access only to their specific database
+# - Credentials injected via secretKeyRef (never exposed in pod specs)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+database:
+  # Unified Database Server Configuration
+  server:
+    image:
+      repository: quay.io/insights-onprem/postgresql
+      tag: "16"
+
+    storage:
+      size: 30Gi  # Total storage for all databases (sum of individual DBs)
+
+    # Server connection settings
+    host: internal  # Use "internal" for built-in StatefulSet
+    port: 5432
+    # adminUser removed - stored in cost-onprem-db-credentials secret (key: postgres-user)
+    # adminPassword removed - stored in cost-onprem-db-credentials secret (key: postgres-password)
+    sslMode: disable
+
+  # Database Credentials Secret Name
+  # Created by: scripts/install-helm-chart.sh
+  # Override to use a different secret name (must exist before Helm install)
+  existingSecret: ""  # Empty = use default: <release-name>-db-credentials
+
+  # ROS Database Configuration
+  ros:
+    # Database name on the unified server
+    name: ros_db
+    # user removed - stored in cost-onprem-db-credentials secret (key: ros-user)
+    # password removed - stored in cost-onprem-db-credentials secret (key: ros-password)
+
+  # Kruize Database Configuration
+  kruize:
+    # Database name on the unified server
+    name: kruize_db
+    # user removed - stored in cost-onprem-db-credentials secret (key: kruize-user)
+    # password removed - stored in cost-onprem-db-credentials secret (key: kruize-password)
+
+  # Koku Database Configuration
+  koku:
+    # Database name on the unified server
+    name: koku
+    # user removed - stored in cost-onprem-db-credentials secret (key: koku-user)
+    # password removed - stored in cost-onprem-db-credentials secret (key: koku-password)
+
+# -----------------------------------------------------------------------------
+# Shared Infrastructure - Kafka
+# -----------------------------------------------------------------------------
+# IMPORTANT: Kafka/Strimzi deployment is NOT managed by this Helm chart!
+# The install-helm-chart.sh script installs Strimzi operator and creates Kafka cluster separately
+# This section only contains connection settings
+kafka:
+  # Bootstrap servers for Kafka cluster
+  # This is auto-configured by the install script based on the Kafka cluster it creates
+  bootstrapServers: "cost-onprem-kafka-kafka-bootstrap.kafka.svc.cluster.local:9092"
+
+  # Security protocol (PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL)
+  securityProtocol: "PLAINTEXT"
+
+# -----------------------------------------------------------------------------
+# Shared Infrastructure - Cache (Valkey)
+# -----------------------------------------------------------------------------
+# Valkey is used as Celery broker/backend and for caching
+valkey:
+  image:
+    repository: registry.redhat.io/rhel10/valkey-8
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  # Connection settings
+  host: "valkey"
+  port: 6379
+  bindAddress: "0.0.0.0"
+  maxMemory: "512mb"
+  maxMemoryPolicy: "allkeys-lru"
+
+  # Persistence configuration for Celery chord callback reliability
+  # IMPORTANT: Enable this for production to prevent data loss on pod restarts
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClassName: ""  # Use default storage class
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Security context for Valkey pod
+  # fsGroup is dynamically detected from namespace SCC annotations for OpenShift
+  # This ensures compatibility across OCP 4.18 and 4.20+
+  securityContext:
+    fsGroup: null  # Dynamically detected by default
+    # Override only if needed for specific requirements:
+    # fsGroup: 1000740000  # Example: CI environment value
+
+# -----------------------------------------------------------------------------
+# Shared Infrastructure - Object Storage (ODF)
+# -----------------------------------------------------------------------------
+# This chart uses OpenShift Data Foundation (ODF) for object storage.
+# ODF provides S3-compatible storage via NooBaa.
+odf:
+  # ODF endpoint - auto-detected from NooBaa CRD if not specified
+  # endpoint: "s3.openshift-storage.svc.cluster.local"
+  # port: 443
+  # useSSL: true
+
+  # rootUser and rootPassword removed - stored in cost-onprem-storage-credentials secret
+  # Created by: scripts/install-helm-chart.sh
+  # Credentials: minioadmin / <random-32-char>
+
+  # S3 region for signature generation (required for S3v4 signatures)
+  # NooBaa/MinIO don't use regions, but boto3 requires it for signature calculation
+  # Default: "onprem" (for on-premise deployments)
+  # Override to AWS region (e.g., "us-east-1") if deploying to AWS S3
+  s3:
+    region: "onprem"
+
+  # Buckets to create during installation
+  buckets:
+    - insights-upload-perma
+    - koku-bucket
+    - ros-data
+
+# -----------------------------------------------------------------------------
+# Authentication Configuration (JWT with Keycloak/RHBK)
+# -----------------------------------------------------------------------------
+# JWT authentication with RHBK using Envoy's native JWT filter
+# Requires RHBK (Red Hat Build of Keycloak) to be deployed
+#
+# Architecture: Centralized Envoy gateway validates JWT tokens inline using
+# native jwt_authn filter with Lua scripting to extract claims and inject
+# X-Rh-Identity header for backend services.
+jwtAuth:
+  # Envoy proxy configuration (used by centralized gateway)
+  envoy:
+    image:
+      repository: registry.redhat.io/openshift-service-mesh/proxyv2-rhel9
+      tag: "2.6"
+      pullPolicy: IfNotPresent
+
+    port: 9080
+    servicePort: 80  # Service port exposed to other components (nginx, etc.)
+    adminPort: 9901
+    logLevel: info
+
+    resources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  # Keycloak configuration for JWT validation
+  # Supported operator: Red Hat Build of Keycloak (RHBK) v22+ - k8s.keycloak.org/v2alpha1
+  keycloak:
+    # Keycloak URL - leave empty for automatic runtime discovery
+    #
+    # Runtime Discovery (when url is empty):
+    #   1. Searches for Keycloak Route in common namespaces (keycloak, keycloak-system)
+    #   2. Falls back to Keycloak Service discovery (cluster-local)
+    #   3. Fails with helpful message if not found
+    #
+    # Override only if using custom/external Keycloak instance
+    url: ""  # e.g., "https://keycloak-keycloak.apps.example.com"
+
+    # Keycloak namespace - leave empty for automatic discovery
+    # Set this if Keycloak is deployed in a custom namespace that doesn't match
+    # the standard patterns (keycloak, keycloak-system)
+    namespace: ""  # e.g., "my-auth-namespace"
+
+    # Keycloak service port for internal cluster-local discovery fallback
+    # Only used when discovering Keycloak via Service (not Route)
+    servicePort: 8080
+
+    # Keycloak realm name
+    realm: kubernetes
+
+    # Client configuration (for reference - used by Cost Management Operator)
+    client:
+      id: cost-management-operator
+
+    # JWT audience claims that will be validated
+    # Must match the 'aud' claim in incoming JWT tokens
+    # Tokens from both the operator and UI OAuth proxy will be accepted
+    audiences:
+      - cost-management-operator
+      - cost-management-ui
+
+    # TLS configuration for Keycloak communication
+    tls:
+      insecureSkipVerify: false
+      # caCert: ""  # Path to CA certificate
+
+# -----------------------------------------------------------------------------
+# UI Configuration (OpenShift OAuth Proxy with Application Container)
+# -----------------------------------------------------------------------------
+# UI component with OAuth proxy sidecar for OpenShift authentication
+# Only available on OpenShift
+ui:
+  replicaCount: 1
+
+  oauthProxy:
+    image:
+      repository: registry.redhat.io/rhceph/oauth2-proxy-rhel9
+      pullPolicy: IfNotPresent
+      tag: "v7.6.0"
+    port: 8443  # OAuth proxy HTTPS port
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+    cookie:
+      # Cookie expiration time (720h = 30 days)
+      expire: "720h"
+      refresh: "4m"
+
+    # TLS configuration for Keycloak OIDC provider communication
+    tls:
+      # Enable CA certificate mounting for Keycloak TLS trust
+      # When enabled, mounts secret 'keycloak-ca-cert' (created by install-helm-chart.sh)
+      caCertEnabled: true
+  app:
+    image:
+      repository: quay.io/insights-onprem/koku-ui-onprem
+      tag: "latest"
+      pullPolicy: IfNotPresent
+    port: 8080
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+
+# -----------------------------------------------------------------------------
+# Network Configuration
+# -----------------------------------------------------------------------------
+# Service type for all services
+service:
+  type: ClusterIP
+
+# OpenShift Routes
+gatewayRoute:
+  annotations:
+    # OpenShift-specific route annotations
+    haproxy.router.openshift.io/timeout: "30s"
+    haproxy.router.openshift.io/rewrite-target: ""
+  hosts:
+    - host: ""  # Empty host uses cluster's default route domain
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    # TLS termination for OpenShift routes
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+
+# -----------------------------------------------------------------------------
+# Resource Defaults
+# -----------------------------------------------------------------------------
+resources:
+  # PostgreSQL resources
+  database:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  # Standard application services (ROS API, Processor, Poller, Housekeeper)
+  # Aligned with SaaS Clowder configuration (ros-ocp-backend/clowdapp.yaml)
+  application:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+
+  # Kruize is memory-intensive (Java workload)
+  kruize:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+
+# -----------------------------------------------------------------------------
+# Health Probe Defaults
+# -----------------------------------------------------------------------------
+probes:
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# -----------------------------------------------------------------------------
+# Monitoring Configuration
+# -----------------------------------------------------------------------------
+monitoring:
+  enabled: true  # Enable monitoring components (ServiceMonitor, etc.)
+  scrapeInterval: 30s  # Prometheus scrape interval for metrics collection

@@ -1,0 +1,43 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-kruize
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: ros-optimization
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow traffic from processor to Kruize REST endpoints
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: ros-processor
+      ports:
+        - protocol: TCP
+          port: {{ .Values.kruize.port }}
+    # Allow traffic from recommendation-poller to Kruize REST endpoints
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: ros-recommendation-poller
+      ports:
+        - protocol: TCP
+          port: {{ .Values.kruize.port }}
+    # Allow traffic from housekeeper to Kruize (for init container health check)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: housekeeper
+      ports:
+        - protocol: TCP
+          port: {{ .Values.kruize.port }}

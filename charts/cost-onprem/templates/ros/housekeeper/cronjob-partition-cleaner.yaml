@@ -1,0 +1,64 @@
+{{- if .Values.ros.housekeeper.partitionCleaner.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-ros-partition-cleaner
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ros-database-maintenance
+spec:
+  schedule: {{ .Values.ros.housekeeper.partitionCleaner.schedule | quote }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "cost-onprem.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: ros-database-maintenance
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ .Values.ros.serviceAccount.name }}
+          {{- with .Values.global.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
+          containers:
+          - name: ros-partition-cleaner
+            image: {{ .Values.ros.image.repository }}:{{ .Values.ros.image.tag }}
+            imagePullPolicy: {{ .Values.ros.image.pullPolicy | default .Values.global.pullPolicy }}
+            command: ["sh"]
+            args:
+              - "-c"
+              - |
+                # NOTE: Migrations are now handled by a pre-upgrade/pre-install Helm Job
+                # See: templates/ros/jobs/migration.yaml
+                ./rosocp start housekeeper --partitions
+            env:
+            - name: CLOWDER_ENABLED
+              value: "false"
+            - name: SERVICE_NAME
+              value: {{ .Values.ros.housekeeper.partitionCleaner.serviceName | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.ros.housekeeper.partitionCleaner.logLevel | quote }}
+            - name: DB_HOST
+              value: {{ include "cost-onprem.database.host" . }}
+            - name: DB_PORT
+              value: {{ .Values.database.server.port | quote }}
+            - name: DB_NAME
+              value: {{ .Values.database.ros.name | quote }}
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cost-onprem.database.secretName" . }}
+                  key: ros-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cost-onprem.database.secretName" . }}
+                  key: ros-password
+            - name: DATABASE_URL
+              value: {{ include "cost-onprem.database.url" . }}
+            resources:
+              {{- toYaml .Values.ros.housekeeper.partitionCleaner.resources | nindent 14 }}
+{{- end }}

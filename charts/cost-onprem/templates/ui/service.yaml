@@ -1,0 +1,22 @@
+{{- if .Values.ui }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: {{ include "cost-onprem.fullname" . }}-ui-tls
+spec:
+  ports:
+    - port: {{ .Values.ui.oauthProxy.port }}
+      targetPort: https
+      name: https
+      protocol: TCP
+  selector:
+    {{- include "cost-onprem.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  type: ClusterIP
+{{- end }}

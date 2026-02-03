@@ -1,0 +1,189 @@
+---
+# NetworkPolicy to secure metrics endpoints for ROS API
+# Allows access only from OpenShift monitoring namespace (Prometheus)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-ros-api-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: ros-api
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow Prometheus from openshift-monitoring namespace to scrape metrics
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: openshift-monitoring
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-monitoring
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+      ports:
+        - protocol: TCP
+          port: {{ .Values.ros.api.metricsPort }}  # Metrics port
+
+---
+# NetworkPolicy to secure metrics endpoints for Cost Management API
+# Allows access only from OpenShift monitoring namespace (Prometheus)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-cost-api-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: cost-management-api
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow Prometheus from openshift-monitoring namespace to scrape metrics
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: openshift-monitoring
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-monitoring
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+      ports:
+        - protocol: TCP
+          port: {{ include "cost-onprem.koku.metrics.port" . }}  # Cost Management API metrics port
+
+---
+# NetworkPolicy for processor metrics
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-processor-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: ros-processor
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow Prometheus from openshift-monitoring namespace to scrape metrics
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: openshift-monitoring
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-monitoring
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+      ports:
+        - protocol: TCP
+          port: {{ .Values.ros.processor.metricsPort }}  # Metrics port
+
+---
+# NetworkPolicy for recommendation-poller metrics
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-poller-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: ros-recommendation-poller
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow Prometheus from openshift-monitoring namespace to scrape metrics
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: openshift-monitoring
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-monitoring
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+      ports:
+        - protocol: TCP
+          port: {{ .Values.ros.recommendationPoller.metricsPort }}  # Metrics port
+
+---
+# NetworkPolicy to allow REST API traffic to ROS API from centralized gateway
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-ros-api-access
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: ros-api
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow traffic from centralized gateway (pre-authenticated)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: gateway
+      ports:
+        - protocol: TCP
+          port: {{ .Values.ros.api.port }}  # ROS API container port
+
+---
+# NetworkPolicy to allow REST API traffic to Cost Management API from centralized gateway
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-cost-api-access
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: cost-management-api
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow traffic from centralized gateway (pre-authenticated)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: gateway
+      ports:
+        - protocol: TCP
+          port: {{ include "cost-onprem.koku.api.port" . }}  # Cost Management API container port

@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-ros-housekeeper
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: housekeeper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cost-onprem.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: housekeeper
+  template:
+    metadata:
+      labels:
+        {{- include "cost-onprem.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: housekeeper
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "cost-onprem.initContainer.waitForDb" (list . "ros") | nindent 8 }}
+        {{- if .Values.kafka.bootstrapServers }}
+        {{- include "cost-onprem.initContainer.waitForKafka" . | nindent 8 }}
+        {{- end }}
+        {{- include "cost-onprem.initContainer.waitForKruize" . | nindent 8 }}
+        {{- include "cost-onprem.initContainer.waitForKoku" . | nindent 8 }}
+      containers:
+        - name: ros-housekeeper
+          image: "{{ .Values.ros.image.repository }}:{{ .Values.ros.image.tag }}"
+          imagePullPolicy: {{ .Values.ros.image.pullPolicy | default .Values.global.pullPolicy }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo 'Waiting for dependencies (Kafka) to be ready...'
+              sleep 60
+              echo 'Starting housekeeper...'
+              # NOTE: Migrations are now handled by a pre-upgrade/pre-install Helm Job
+              # See: templates/ros/jobs/migration.yaml
+              ./rosocp start housekeeper --sources
+          env:
+            - name: CLOWDER_ENABLED
+              value: "false"
+            # Point to Koku API for sources endpoints (application_types, etc.)
+            - name: SOURCES_API_BASE_URL
+              value: "http://{{ include "cost-onprem.koku.api.reads.name" . }}:{{ .Values.costManagement.api.service.port }}"
+            - name: SOURCES_API_PREFIX
+              value: "/api/cost-management/v1"
+            - name: KRUIZE_HOST
+              value: {{ include "cost-onprem.fullname" . }}-kruize
+            - name: KRUIZE_PORT
+              value: {{ .Values.kruize.port | quote }}
+            - name: SERVICE_NAME
+              value: {{ .Values.ros.housekeeper.serviceName | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.ros.housekeeper.logLevel | quote }}
+            - name: DB_HOST
+              value: {{ include "cost-onprem.database.host" . }}
+            - name: DB_PORT
+              value: {{ .Values.database.server.port | quote }}
+            - name: DB_NAME
+              value: {{ .Values.database.ros.name | quote }}
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cost-onprem.database.secretName" . }}
+                  key: ros-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cost-onprem.database.secretName" . }}
+                  key: ros-password
+            - name: DATABASE_URL
+              value: {{ include "cost-onprem.database.url" . }}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ include "cost-onprem.kafka.bootstrapServers" . | quote }}
+            - name: KAFKA_SECURITY_PROTOCOL
+              value: {{ include "cost-onprem.kafka.securityProtocol" . | quote }}
+            # Topic for source deletion events from Koku (matches hardcoded topic in Koku)
+            - name: SOURCES_EVENT_TOPIC
+              value: "platform.sources.event-stream"
+          resources:
+            {{- toYaml .Values.resources.application | nindent 12 }}

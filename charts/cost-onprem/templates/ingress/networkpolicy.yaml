@@ -1,0 +1,29 @@
+---
+# NetworkPolicy to allow traffic to Ingress service for file uploads
+# Traffic comes from centralized gateway which handles JWT authentication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: ingress
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow traffic from centralized gateway (pre-authenticated)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: gateway
+      ports:
+        - protocol: TCP
+          port: {{ .Values.ingress.server.port }}  # Ingress container port
+

@@ -1,0 +1,119 @@
+{{- $fullName := include "cost-onprem.fullname" . -}}
+{{- $namespace := .Release.Namespace -}}
+
+🎉 Cost Management On-Premise {{ .Chart.Version }} has been deployed successfully!
+
+📦 Release: {{ .Release.Name }}
+🏷️  Namespace: {{ $namespace }}
+🖥️  Platform: OpenShift
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 DEPLOYMENT STATUS
+
+Check deployment status:
+  oc get pods -n {{ $namespace }}
+
+Wait for all pods to be ready:
+  oc wait --for=condition=ready pod \
+    -l app.kubernetes.io/instance={{ .Release.Name }} \
+    -n {{ $namespace }} --timeout=300s
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 ACCESS POINTS
+
+OpenShift Routes:
+  oc get routes -n {{ $namespace }}
+
+Get Main Route URL:
+  export ROUTE_HOST=$(oc get route {{ $fullName }}-ingress -n {{ $namespace }} -o jsonpath='{.spec.host}')
+  echo "https://$ROUTE_HOST"
+
+API Endpoints:
+  - Cost Management API: /api/cost-management/v1
+  - Sources API: /api/cost-management/v1/sources/ (integrated in Koku)
+  - Upload API: /api/ingress/*
+
+Health Check:
+  curl http://$(oc get route {{ $fullName }}-ingress -n {{ $namespace }} -o jsonpath='{.spec.host}')/api/ingress/ready
+  curl http://$(oc get route {{ $fullName }}-main -n {{ $namespace }} -o jsonpath='{.spec.host}')/status
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔐 AUTHENTICATION
+
+✅ JWT Authentication: ENABLED
+
+Keycloak Configuration:
+{{- if .Values.jwtAuth.keycloak.url }}
+  - Keycloak URL: {{ .Values.jwtAuth.keycloak.url }}
+{{- else }}
+  - Auto-detected via Keycloak CR
+{{- end }}
+  - Realm: {{ .Values.jwtAuth.keycloak.realm }}
+
+Verify Keycloak connectivity:
+  oc get keycloak -A
+
+For authentication setup details:
+  https://github.com/insights-onprem/cost-onprem-chart/blob/main/docs/keycloak-jwt-authentication-setup.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💾 STORAGE
+
+OpenShift Data Foundation (ODF):
+  oc get pvc -n {{ $namespace }}
+
+Storage Classes:
+  - PostgreSQL: {{ default (include "cost-onprem.storage.class" .) .Values.database.storageClass }}
+  - Kafka: {{ default (include "cost-onprem.storage.class" .) .Values.kafka.storageClass }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔍 TROUBLESHOOTING
+
+View logs:
+  # ROS API
+  oc logs -n {{ $namespace }} -l app.kubernetes.io/component=ros-api --tail=100
+
+  # ROS Processor
+  oc logs -n {{ $namespace }} -l app.kubernetes.io/component=ros-processor --tail=100
+
+  # Ingress
+  oc logs -n {{ $namespace }} -l app.kubernetes.io/component=ingress --tail=100
+
+  # Cost Management API (reads)
+  oc logs -n {{ $namespace }} -l app.kubernetes.io/component=cost-management-api-reads --tail=100
+
+  # Cost Management API (writes)
+  oc logs -n {{ $namespace }} -l app.kubernetes.io/component=cost-management-api-writes --tail=100
+
+Check service health:
+  oc get pods -n {{ $namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Common issues:
+  - Pods not starting: Check PVC binding status
+  - Authentication errors: Verify Keycloak configuration
+  - Connection errors: Check service endpoints
+
+Full troubleshooting guide:
+  https://github.com/insights-onprem/cost-onprem-chart/blob/main/docs/troubleshooting.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 DOCUMENTATION
+
+Complete guides available at:
+  https://github.com/insights-onprem/cost-onprem-chart/tree/main/docs
+
+Key resources:
+  - Installation Guide: docs/installation.md
+  - Configuration Guide: docs/configuration.md
+  - JWT Authentication: docs/keycloak-jwt-authentication-setup.md
+  - Troubleshooting: docs/troubleshooting.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Thank you for using Cost Management On-Premise! 🚀

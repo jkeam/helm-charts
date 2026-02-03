@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cost-onprem.fullname" . }}-ros-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ros-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cost-onprem.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ros-api
+  template:
+    metadata:
+      labels:
+        {{- include "cost-onprem.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ros-api
+    spec:
+      serviceAccountName: {{ .Values.ros.serviceAccount.name }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "cost-onprem.initContainer.waitForDb" (list . "ros") | nindent 8 }}
+        {{- if .Values.kafka.bootstrapServers }}
+        {{- include "cost-onprem.initContainer.waitForKafka" . | nindent 8 }}
+        {{- end }}
+      containers:
+        # ROS API - receives pre-authenticated traffic from centralized gateway
+        # Gateway validates JWT and injects X-Rh-Identity header
+        - name: ros-api
+          image: "{{ .Values.ros.image.repository }}:{{ .Values.ros.image.tag }}"
+          imagePullPolicy: {{ .Values.ros.image.pullPolicy | default .Values.global.pullPolicy }}
+          securityContext:
+            {{- include "cost-onprem.securityContext.nonRoot" . | nindent 12 }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              # NOTE: Migrations are now handled by a pre-upgrade/pre-install Helm Job
+              # See: templates/ros/jobs/migration.yaml
+              ./rosocp start api
+          ports:
+            - name: http
+              containerPort: {{ .Values.ros.api.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.ros.api.metricsPort }}
+              protocol: TCP
+          env:
+            - name: PATH_PREFIX
+              value: {{ .Values.ros.api.pathPrefix | quote }}
+            - name: CLOWDER_ENABLED
+              value: "false"
+            - name: RBAC_ENABLE
+              value: {{ .Values.ros.api.rbacEnabled | quote }}
+            - name: DB_POOL_SIZE
+              value: {{ .Values.ros.api.dbPoolSize | quote }}
+            - name: DB_MAX_OVERFLOW
+              value: {{ .Values.ros.api.dbMaxOverflow | quote }}
+            - name: SERVICE_NAME
+              value: {{ .Values.ros.api.serviceName | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.ros.api.logLevel | quote }}
+            - name: DB_HOST
+              value: {{ include "cost-onprem.database.host" . }}
+            - name: DB_PORT
+              value: {{ .Values.database.server.port | quote }}
+            - name: DB_NAME
+              value: {{ .Values.database.ros.name | quote }}
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cost-onprem.database.secretName" . }}
+                  key: ros-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cost-onprem.database.secretName" . }}
+                  key: ros-password
+            - name: DATABASE_URL
+              value: {{ include "cost-onprem.database.url" . }}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ include "cost-onprem.kafka.bootstrapServers" . | quote }}
+            - name: KAFKA_SECURITY_PROTOCOL
+              value: {{ include "cost-onprem.kafka.securityProtocol" . | quote }}
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: {{ .Values.ros.api.port }}
+            initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: {{ .Values.ros.api.port }}
+            initialDelaySeconds: 15
+            periodSeconds: {{ .Values.probes.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources.application | nindent 12 }}

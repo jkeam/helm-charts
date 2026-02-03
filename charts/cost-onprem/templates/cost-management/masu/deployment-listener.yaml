@@ -1,0 +1,117 @@
+{{- if and .Values.costManagement.listener.enabled .Values.costManagement.kafka.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cost-onprem.koku.listener.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.koku.labels" . | nindent 4 }}
+    app.kubernetes.io/component: listener
+spec:
+  replicas: {{ .Values.costManagement.listener.replicas }}
+  selector:
+    matchLabels:
+      {{- include "cost-onprem.koku.listener.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cost-onprem.koku.labels" . | nindent 8 }}
+        app.kubernetes.io/component: listener
+    spec:
+      serviceAccountName: {{ .Values.costManagement.serviceAccount.name }}
+      automountServiceAccountToken: false
+
+      securityContext:
+        {{- include "cost-onprem.securityContext.pod.nonRoot" . | nindent 8 }}
+
+      initContainers:
+      {{- include "cost-onprem.koku.initContainer.combineCA" . | nindent 6 }}
+      containers:
+      - name: listener
+        image: "{{ include "cost-onprem.koku.image" . }}"
+        imagePullPolicy: {{ .Values.costManagement.api.image.pullPolicy }}
+        securityContext:
+          {{- include "cost-onprem.securityContext.container" . | nindent 10 }}
+
+        ports:
+        - containerPort: {{ include "cost-onprem.koku.metrics.port" . }}
+          protocol: TCP
+          name: probes
+
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: {{ include "cost-onprem.koku.metrics.port" . }}
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 5
+          successThreshold: 1
+
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: {{ include "cost-onprem.koku.metrics.port" . }}
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 5
+          successThreshold: 1
+
+        # Resource limits and requests
+        resources:
+          {{- toYaml .Values.costManagement.listener.resources | nindent 10 }}
+
+        # Environment variables
+        env:
+        # Listener-specific environment variables (must come first)
+        - name: MASU
+          value: "true"
+        - name: KAFKA_CONNECT
+          value: "true"
+        - name: API_PATH_PREFIX
+          value: /api/cost-management
+
+        # Kafka consumer configuration
+        - name: KAFKA_CONSUMER_GROUP_ID
+          value: {{ .Values.costManagement.kafka.consumerGroupId | default "cost-mgmt-listener-group" | quote }}
+
+        # Kafka topic configuration
+        {{- if .Values.costManagement.kafka.topic }}
+        - name: KAFKA_TOPIC
+          value: {{ .Values.costManagement.kafka.topic | quote }}
+        {{- end }}
+
+        # Common Koku environment variables (includes DB, Valkey, S3, Kafka, etc.)
+        {{- include "cost-onprem.koku.commonEnv" . | nindent 8 }}
+
+        # POD_CPU_LIMIT is required for gunicorn worker calculation
+        - name: POD_CPU_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              containerName: listener
+              resource: limits.cpu
+
+        {{- range $key, $value := .Values.costManagement.listener.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+
+        volumeMounts:
+        {{- include "cost-onprem.koku.volumeMounts" . | nindent 8 }}
+
+        # Command to run Kafka listener
+        command:
+        - /bin/bash
+        - -c
+        - |
+          cd $APP_HOME
+          echo "Starting Kafka listener..."
+          echo "Kafka host: $INSIGHTS_KAFKA_HOST:$INSIGHTS_KAFKA_PORT"
+          exec python manage.py listener
+
+      volumes:
+      {{- include "cost-onprem.koku.volumes" . | nindent 6 }}
+{{- end }}
+

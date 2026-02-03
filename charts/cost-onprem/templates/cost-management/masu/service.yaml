@@ -1,0 +1,19 @@
+{{- if .Values.costManagement.masu.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cost-onprem.koku.masu.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cost-onprem.koku.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cost-processor
+spec:
+  type: ClusterIP
+  ports:
+  - port: {{ include "cost-onprem.koku.api.port" . }}
+    targetPort: {{ include "cost-onprem.koku.api.port" . }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "cost-onprem.koku.masu.selectorLabels" . | nindent 4 }}
+{{- end }}
