@@ -1,6 +1,6 @@
 apiVersion: v2
 name: cost-onprem
-description: Jon Keams Cost Management On-Premise solution for OpenShift that maps to v0.3.0
+description: Jon Keam Cost Management On-Premise solution for OpenShift that maps to v0.3.0
 type: application
 version: 0.0.1
 appVersion: "0.0.1"
